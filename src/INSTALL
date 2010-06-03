@@ -1,0 +1,20 @@
+#Cheetah
+
+
+Thư viện mã hóa chuỗi thành mã vạch 2D
+======================================
+  easy_install elaphe
+  easy_install huBarcode
+
+
+
+xapian-core
+./configure --prefix=/opt
+make && make install
+
+xapian-binding
+./configure PYTHON=/usr/bin/python2.6 --with-python --prefix=/opt XAPIAN_CONFIG=/opt/bin/xapian-config
+make && make install
+
+xappy
+python setup.py install

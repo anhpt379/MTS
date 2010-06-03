@@ -1,0 +1,169 @@
+<!--
+ ~ Copyright 2009 T Jake Luciani
+ ~
+ ~ Licensed to the Apache Software Foundation (ASF) under one
+ ~ or more contributor license agreements.  See the NOTICE file
+ ~ distributed with this work for additional information
+ ~ regarding copyright ownership.  The ASF licenses this file
+ ~ to you under the Apache License, Version 2.0 (the
+ ~ "License"); you may not use this file except in compliance
+ ~ with the License.  You may obtain a copy of the License at
+ ~
+ ~    http://www.apache.org/licenses/LICENSE-2.0
+ ~
+ ~ Unless required by applicable law or agreed to in writing,
+ ~ software distributed under the License is distributed on an
+ ~ "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ ~ KIND, either express or implied.  See the License for the
+ ~ specific language governing permissions and limitations
+ ~ under the License.
+ -->
+<project name="lucandra" default="lucandra.jar" basedir="."
+         xmlns:ivy="antlib:org.apache.ivy.ant">
+
+        <description>Lucandra</description>
+
+        <property name="src"           location="src" />
+        <property name="thrift"        location="thrift" />
+        <property name="test"          location="test" />
+        <property name="config"        location="config" />
+        <property name="build"         location="build" />
+        <property name="build.classes" location="${build}/classes"/>
+        <property name="build.test.classes" location="${build}/test-classes"/>
+        <property name="lib"           location="lib" />
+        <property name="cassandra.host" value="127.0.0.1"/>
+        <property name="cassandra.port" value="9160"/>
+        <property name="cassandra.framed" value="false"/>
+
+
+        <!-- ivy properties -->
+        <property name="ivy.version" value="2.1.0" />
+        <property name="ivy.dir" location="${build}/ivy" />
+        <property name="ivy.jar" location="${ivy.dir}/ivy-${ivy.version}.jar"/>
+        <property name="ivy.lib.dir" location="${lib}" />
+        <property name="ivy_repo_url" value="http://repo2.maven.org/maven2/org/apache/ivy/ivy/${ivy.version}/ivy-${ivy.version}.jar"/>
+        <property name="ivysettings.xml" location="${ivy.dir}/ivysettings.xml" />
+
+        <target name="init">
+          <tstamp />
+          <mkdir dir="${build}" />
+          <mkdir dir="${build}/output" />
+          <mkdir dir="${build.classes}" />
+          <mkdir dir="${build.test.classes}"/>
+          <mkdir dir="${ivy.dir}" />
+          <mkdir dir="${ivy.lib.dir}" />
+          <!--
+              Allow Ivy to be disabled with "-Dnoivy=".
+              It is kind of a hack to pretend that we already found it,
+              but Ant doesn't provide an easy way of blocking dependencies
+              from executing or checking multiple conditions.
+            -->
+          <condition property="ivy.found"><isset property="noivy" /></condition>
+          <condition property="offline"><isset property="noivy" /></condition>
+        </target>
+
+
+        <target name="ivy-download"  description="To download ivy" unless="offline">
+          <get src="${ivy_repo_url}" dest="${ivy.jar}" usetimestamp="true"/>
+        </target>
+
+        <target name="ivy-probe-antlib">
+          <condition property="ivy.found">
+            <typefound uri="antlib:org.apache.ivy.ant" name="cleancache"/>
+          </condition>
+        </target>
+
+        <target name="ivy-init-antlib" depends="ivy-download,ivy-probe-antlib" unless="ivy.found">
+          <typedef uri="antlib:org.apache.ivy.ant" onerror="fail"
+                   loaderRef="ivyLoader">
+            <classpath>
+              <pathelement location="${ivy.jar}"/>
+            </classpath>
+          </typedef>
+          <fail>
+            <condition >
+              <not>
+                <typefound uri="antlib:org.apache.ivy.ant" name="cleancache"/>
+              </not>
+            </condition>
+            You need Apache Ivy 2.0 or later from http://ant.apache.org/
+            It could not be loaded from ${ivy_repo_url}
+          </fail>
+        </target>
+
+        <target name="resolve" depends="ivy-init-antlib" description="retrieve dependencies with ivy" unless="noivy">
+          <ivy:retrieve />
+        </target>
+
+
+        <path id="autoivy.classpath">
+          <fileset dir="${ivy.lib.dir}">
+            <include name="**/*.jar" />
+          </fileset>
+        </path>
+
+        <!-- ===========================  -->
+
+        <path id="lucandra.classpath">
+          <pathelement location="${build.classes}"/>
+          <pathelement location="${build.test.classes}"/>
+          <pathelement location="${config}"/>
+          <fileset dir="${lib}">
+            <include name="**/*.jar" />
+          </fileset>
+          <path refid="autoivy.classpath" />
+        </path>
+
+
+        <target name="compile" depends="init,resolve">
+          <javac debug="true" destdir="${build.classes}">
+            <src path="${thrift}"/>
+            <src path="${src}"/>
+            <classpath refid="lucandra.classpath"/>
+          </javac>
+        </target>
+
+        <target name="compile.tests" depends="compile">
+          <javac debug="true" destdir="${build.test.classes}">
+            <src path="${test}"/>
+            <classpath refid="lucandra.classpath"/>
+          </javac>
+        </target>
+
+
+        <target name="test" depends="compile.tests">
+          <echo message="running tests"/>
+          <mkdir dir="${build}/output"/>
+          <junit fork="on" failureproperty="testfailed">
+            <classpath refid="lucandra.classpath"/>
+            <formatter type="xml" usefile="true"/>
+            <formatter type="brief" usefile="false"/>
+
+            <batchtest todir="${build}/output">
+              <fileset dir="${build.test.classes}" includes="**/*Test*" />
+            </batchtest>
+            <jvmarg value="-Dcassandra.host=${cassandra.host}"/>
+            <jvmarg value="-Dcassandra.port=${cassandra.port}"/>
+            <jvmarg value="-Dcassandra.framed=${cassandra.framed}"/>
+          </junit>
+          <fail if="testfailed" message="Some test(s) failed."/>
+        </target>
+
+        <target name="lucandra.jar" depends="compile,compile.tests">
+          <jar jarfile="lucandra.jar" basedir="${build.classes}" />
+          <jar jarfile="lucandra-tests.jar" basedir="${build.test.classes}" />
+        </target>
+
+        <target name="demo" depends="compile.tests">
+          <java classname="lucandra.demo.BookmarksDemo">
+            <classpath refid="lucandra.classpath"/>
+          </java>
+        </target>
+
+        <target name="clean">
+          <delete dir="${build}" />
+          <delete file="lucandra.jar" />
+          <delete file="lucandra-tests.jar" />
+        </target>
+
+</project>
